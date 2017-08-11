@@ -196,7 +196,7 @@ module Esites
       md5HashFile = "#{absPath}/.__md5checksum"
       if File.file?(md5HashFile) && File.read(md5HashFile) == md5String
         Logger::log("Nothing changed")
-        abort
+        exit
       end
 
       # ----------------------------------------------------------------------------------
