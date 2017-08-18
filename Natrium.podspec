@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name           = "Natrium"
-  s.version        = "2.3"
+  s.version        = "2.4"
   s.ios.deployment_target = "8.0"
   s.osx.deployment_target = "10.10"
   s.summary        = "An advanced pre-build ruby script to alter your project per environment and build configuration."
@@ -12,5 +12,5 @@ Pod::Spec.new do |s|
   s.source_files   = "#{s.name}/*.{h,swift}"
   s.requires_arc   = true
   s.frameworks    = 'Foundation'
-
+  s.dependency 'RNCryptor', '5.0.1'
 end
