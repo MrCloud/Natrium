@@ -8,6 +8,8 @@ require 'digest/md5'
 require 'fileutils'
 require 'net/http'
 require 'rexml/document'
+require 'ruby_rncryptor'
+require 'base64'
 begin
   require 'xcodeproj'
 rescue LoadError
@@ -37,6 +39,7 @@ module Esites
     attr_accessor :xcconfigContentLines
     attr_accessor :haswarning
     attr_accessor :swift_version
+    attr_accessor :cryptopassword
 
     def setup
       @environments = [ 'Staging', 'Production' ]
@@ -54,10 +57,13 @@ module Esites
       @buildConfigFile = "build-config.yml"
       @tabs = " " * 4
       @customVariables = {}
+      @editableVariables = {}
+      @customObfuscatedVariables = {}
       @app_version = ""
       @printLogs = []
       @appIconRibbon = { "ribbon" => nil, "original" => nil, "appiconset" => nil, "legacy" => false }
       @xcconfigContentLines = { "*" => {} }
+      @cryptopassword = ""
     end
 
     def run
@@ -270,7 +276,8 @@ module Esites
 
       @swiftLines = []
       # Write to Config.swift
-      @swiftLines << "import Foundation\n"
+      @swiftLines << "import Foundation"
+      @swiftLines << "import RNCryptor\n"
       @swiftLines << "public class #{@baseClass} {"
 
       @swiftLines << "#{tabs}public enum EnvironmentType : String {"
@@ -306,6 +313,30 @@ module Esites
       @customVariables.each do |key,tv|
         @swiftLines << variable(key, tv["type"], tv["value"])
       end
+
+      @swiftLines << ""
+      @editableVariables.each do |key,tv|
+        @swiftLines << editable_variable(key, tv["type"], tv["value"])
+      end
+
+
+      @swiftLines << ""
+      @customObfuscatedVariables.each do |key,tv|
+      @swiftLines << obfusctated_variable(key, tv["type"], "\"#{tv["value"]}\"")
+      end
+
+      @swiftLines << "}"
+
+      @swiftLines << "extension #{@baseClass} {"
+      @swiftLines << "    public static func decrypt(data: Data, using cryptopassword: String = #{@baseClass}.cryptopassword) -> String {
+          do {
+              let originalData = try RNCryptor.decrypt(data: data, withPassword: cryptopassword)
+              return String(data: originalData, encoding: .utf8)!
+          } catch {
+              print(error)
+              return \"\"
+          }
+      }"
       @swiftLines << "}"
 
       @printLogs << Logger::info("Write #{absPath}/Config.swift", false)
@@ -567,6 +598,19 @@ module Esites
               end
               @customVariables[infoplistkey] = { "type" => type, "value" => value}
             end
+          elsif key == "obfuscatedvariables"
+            type = type_of(value)
+            if type != nil
+              if infoplistkey == "environment" || infoplistkey == "configuration"
+                error("Cannot use '#{infoplistkey}' as a variable name. Reserved.")
+              elsif infoplistkey == "cryptopassword"
+                @cryptopassword = value
+                @editableVariables[infoplistkey] = { "type" => type, "value" => "#{value}"}
+              else
+                copy = @cryptopassword
+                @customObfuscatedVariables[infoplistkey] = { "type" => type, "value" => Base64.strict_encode64(RubyRNCryptor.encrypt(value, copy.gsub!('"', '')))}
+              end
+            end
           end
         end
       end
@@ -662,6 +706,14 @@ module Esites
     # ----------
 
     def variable(name, type, value)
+      return "#{tabs}public static let #{name}:#{type} = #{value}"
+    end
+
+    def editable_variable(name, type, value)
+      return "#{tabs}public static var #{name}:#{type} = #{value}"
+    end
+
+    def obfusctated_variable(name, type, value)
       return "#{tabs}public static let #{name}:#{type} = #{value}"
     end
 
